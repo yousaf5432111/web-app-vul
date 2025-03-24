@@ -1,59 +1,57 @@
 <?php
 
-use App\Http\Controllers\Auth\AuthenticatedSessionController;
-use App\Http\Controllers\Auth\ConfirmablePasswordController;
-use App\Http\Controllers\Auth\EmailVerificationNotificationController;
-use App\Http\Controllers\Auth\EmailVerificationPromptController;
-use App\Http\Controllers\Auth\NewPasswordController;
-use App\Http\Controllers\Auth\PasswordController;
-use App\Http\Controllers\Auth\PasswordResetLinkController;
-use App\Http\Controllers\Auth\RegisteredUserController;
-use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\LessonController;
+use App\Http\Controllers\ChallengeController;
+use App\Http\Controllers\ProgressController;
+use App\Http\Controllers\FeedbackController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('guest')->group(function () {
-    Route::get('register', [RegisteredUserController::class, 'create'])
-        ->name('register');
 
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+    
+    
+        Route::get('/sanctum/csrf-cookie', function () {
+            return response()->json(['message' => 'CSRF token set']);
+        });
 
-    Route::get('login', [AuthenticatedSessionController::class, 'create'])
-        ->name('login');
 
-    Route::post('login', [AuthenticatedSessionController::class, 'store']);
+        // Lesson routes
+Route::get('/lessons', [LessonController::class, 'index']);
+Route::get('/lessons/{id}', [LessonController::class, 'show']);
 
-    Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
-        ->name('password.request');
+// Challenge routes
+Route::get('/challenges', [ChallengeController::class, 'index']);
+Route::get('/challenges/{id}', [ChallengeController::class, 'show']);
+Route::post('/challenges/{id}/evaluate', [ChallengeController::class, 'evaluate']);
 
-    Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
-        ->name('password.email');
+// Progress routes
+Route::post('/progress', [ProgressController::class, 'store']);
+Route::get('/progress/{userId}', [ProgressController::class, 'show']);
 
-    Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])
-        ->name('password.reset');
-
-    Route::post('reset-password', [NewPasswordController::class, 'store'])
-        ->name('password.store');
+Route::get('/test', function () {
+    return response()->json(['message' => 'API is working']);
 });
 
-Route::middleware('auth')->group(function () {
-    Route::get('verify-email', EmailVerificationPromptController::class)
-        ->name('verification.notice');
+Route::post('/challenges/sql-injection-demo', [ChallengeController::class, 'sqlInjectionDemo']);
+Route::post('/challenges/csrf-demo', [ChallengeController::class, 'csrfDemo']);
 
-    Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
-        ->middleware(['signed', 'throttle:6,1'])
-        ->name('verification.verify');
+Route::post('/challenges/{id}/evaluate', [ChallengeController::class, 'evaluate']);
 
-    Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
-        ->middleware('throttle:6,1')
-        ->name('verification.send');
 
-    Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])
-        ->name('password.confirm');
+Route::get('/user-details', [UserController::class, 'getUserDetails']);
+Route::post('/update-profile', [UserController::class, 'updateProfile']);
 
-    Route::post('confirm-password', [ConfirmablePasswordController::class, 'store']);
 
-    Route::put('password', [PasswordController::class, 'update'])->name('password.update');
 
-    Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
-        ->name('logout');
-});
+Route::post('/feedback/test', [FeedbackController::class, 'test']);
+Route::post('/feedback', [FeedbackController::class, 'store']);
+Route::get('/feedback', [FeedbackController::class, 'index']);
+Route::get('/feedback/{id}', [FeedbackController::class, 'show']);
+Route::put('/feedback/{id}', [FeedbackController::class, 'update']);
+Route::delete('/feedback/{id}', [FeedbackController::class, 'destroy']);
+Route::get('/feedback/export/csv', [FeedbackController::class, 'exportCsv']);
+Route::get('/feedback/stats', [FeedbackController::class, 'getStats']);
