@@ -119,18 +119,37 @@ class ChallengeController extends Controller
     
     public function leaderboard()
     {
-        $leaderboard = DB::table('users')
-            ->join('user_progress', 'users.id', '=', 'user_progress.user_id')
-            ->join('challenges', 'user_progress.challenge_id', '=', 'challenges.id')
-            ->where('user_progress.completed', true)
-            ->select('users.id', 'users.name', 'users.username',
-                     DB::raw('sum(user_progress.score) as total_score'),
-                     DB::raw('count(user_progress.id) as challenges_completed'))
-            ->groupBy('users.id', 'users.name', 'users.username')
-            ->orderBy('total_score', 'desc')
-            ->take(10)
-            ->get();
+        try {
+            $leaderboard = DB::table('users')
+                ->join('user_progress', 'users.id', '=', 'user_progress.user_id')
+                ->join('challenges', 'user_progress.challenge_id', '=', 'challenges.id')
+                ->where('user_progress.completed', true)
+                ->whereNotNull('user_progress.challenge_id')
+                ->select(
+                    'users.id',
+                    'users.name',
+                    'users.email',
+                    DB::raw('COALESCE(SUM(user_progress.score), 0) as total_score'),
+                    DB::raw('COUNT(DISTINCT user_progress.challenge_id) as challenges_completed')
+                )
+                ->groupBy('users.id', 'users.name', 'users.email')
+                ->orderBy('total_score', 'desc')
+                ->take(10)
+                ->get();
+                
+            return response()->json($leaderboard);
             
-        return response()->json($leaderboard);
+        } catch (\Exception $e) {
+            Log::error('Leaderboard error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Failed to load leaderboard',
+                'details' => $e->getMessage()
+            ], 500);
+        }
     }
+    
+
+    
+
+
 }
