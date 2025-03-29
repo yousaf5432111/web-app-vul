@@ -11,6 +11,7 @@ import UserProfilePage from './UserProfilePage';
 import AboutPage from './AboutPage';
 import FeedbackPage from './FeedbackPage';
 import AdminPage from './AdminPage';
+// import Leaderboard from './Leaderboard';
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/about" element={<AboutPage/>} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/feedback" element={<FeedbackPage />} />
+            {/* <Route path='/leaderboard' element={<Leaderboard />} /> */}
             <Route path="*" element={<h1>Not Found</h1>} />
           </Routes>
         </main>
