@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FiClock, FiAward, FiFlag, FiArrowLeft, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
 import api from './api';
 import Confetti from 'react-confetti';
+import AIAssistant from './AIAssistant';
 
 export default function ChallengePage() {
   const { id } = useParams();
@@ -15,9 +18,10 @@ export default function ChallengePage() {
     max_score: 0
   });
   const [challengePassed, setChallengePassed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userInput, setUserInput] = useState('');
 
   useEffect(() => {
-    // Fetch challenge details based on the challenge ID
     const fetchChallengeDetails = async () => {
       try {
         const response = await api.get(`/challenges/${id}`);
@@ -28,7 +32,6 @@ export default function ChallengePage() {
     };
     fetchChallengeDetails();
 
-    // Countdown timer for the challenge
     if (timeLeft > 0 && !challengePassed) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
@@ -37,7 +40,7 @@ export default function ChallengePage() {
 
   const handleChallengeSubmit = async (e) => {
     e.preventDefault();
-    const userInput = e.target.elements[0].value;
+    setIsSubmitting(true);
     const userId = localStorage.getItem('userId');
   
     try {
@@ -49,71 +52,207 @@ export default function ChallengePage() {
       if (response.data.result) {
         setChallengePassed(true);
         setChallengeResult("Challenge passed! Well done!");
+        await updateProgress();
       } else {
         setChallengeResult(response.data.message || "Challenge failed. Try again.");
       }
     } catch (error) {
       console.error("Challenge evaluation failed", error);
       setChallengeResult("Challenge evaluation failed.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  console.log(localStorage.getItem('userId'));
   const updateProgress = async () => {
     try {
       await api.post('/progress', {
-        user_id: localStorage.getItem('userId'),  // Assuming user ID is stored in localStorage
+        user_id: localStorage.getItem('userId'),
         challenge_id: id,
         completed: true,
         score: challengeDetails.max_score
       });
-      console.log("Progress updated successfully");
     } catch (error) {
       console.error("Failed to update progress", error);
     }
   };
 
+  const getDifficultyColor = () => {
+    switch(challengeDetails.difficulty.toLowerCase()) {
+      case 'easy': return 'bg-green-100 text-green-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'hard': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   return (
-    <div className="p-8 space-y-6">
-      <h1 className="text-3xl font-bold">{challengeDetails.title || "Challenge"}</h1>
-      
-      {challengePassed && <Confetti width={window.innerWidth} height={window.innerHeight} />}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      {/* Confetti Celebration */}
+      <AnimatePresence>
+        {challengePassed && <Confetti width={window.innerWidth} height={window.innerHeight} />}
+      </AnimatePresence>
 
-      <div className="bg-white shadow-lg rounded p-4">
-        <h2 className="font-semibold">Challenge Details</h2>
-        <p>{challengeDetails.instructions || "No challenge instructions available."}</p>
-        <p><strong>Difficulty:</strong> {challengeDetails.difficulty}</p>
-        <p><strong>Max Score:</strong> {challengeDetails.max_score}</p>
-      </div>
-      
-      <form onSubmit={handleChallengeSubmit} className="bg-white shadow-lg rounded p-4 space-y-4">
-        <textarea className="w-full p-2 border rounded" placeholder="Enter your SQL injection payload here..."></textarea>
-        <button type="submit" className="w-full p-2 bg-blue-500 text-white rounded">Submit</button>
-      </form>
-      
-      {challengeResult && <div className="p-4 bg-green-100 text-green-800 rounded">{challengeResult}</div>}
-      
-      <div className="bg-white shadow-lg rounded p-4">
-        <p>Time left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</p>
-        <div className="w-full bg-gray-200 rounded h-2 mt-2">
-          <div className="h-2 bg-blue-500 rounded" style={{ width: `${(timeLeft / 300) * 100}%` }}></div>
-        </div>
-      </div>
-
-      {challengePassed && (
-        <div className="fixed inset-0 flex items-center justify-center bg-opacity-50 bg-black z-50">
-          <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-            <h2 className="text-2xl font-bold text-green-500">Congratulations!</h2>
-            <p className="mt-4">You've successfully completed the challenge!</p>
-            <button
-              className="mt-6 px-4 py-2 bg-blue-500 text-white rounded"
-              onClick={() => navigate('/dashboard')}
-            >
-              Back to Dashboard
-            </button>
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <button 
+            onClick={() => navigate(-1)}
+            className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            <FiArrowLeft className="mr-2" /> Back to Challenges
+          </button>
+          
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${getDifficultyColor()}`}>
+            {challengeDetails.difficulty}
           </div>
         </div>
-      )}
+
+        {/* Challenge Content */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          {/* Challenge Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-800">
+              {challengeDetails.title || "Challenge"}
+            </h1>
+            
+            <div className="flex items-center mt-4 md:mt-0">
+              <FiAward className="text-yellow-500 mr-2" />
+              <span className="font-medium">Max Score: {challengeDetails.max_score}</span>
+            </div>
+          </div>
+
+          {/* Timer */}
+          <div className="bg-white rounded-xl shadow-md p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <FiClock className="text-blue-500 mr-2" />
+                <span className="font-medium">Time Remaining</span>
+              </div>
+              <span className="text-xl font-mono">
+                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+              <motion.div 
+                className="h-2 rounded-full bg-gradient-to-r from-blue-400 to-indigo-500"
+                initial={{ width: '100%' }}
+                animate={{ width: `${(timeLeft / 300) * 100}%` }}
+                transition={{ duration: 1 }}
+              />
+            </div>
+          </div>
+
+          {/* Challenge Card */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold mb-4 flex items-center">
+                <FiFlag className="mr-2 text-blue-500" /> Challenge Instructions
+              </h2>
+              <div className="prose max-w-none">
+                <p className="text-gray-700 whitespace-pre-line">
+                  {challengeDetails.instructions || "No challenge instructions available."}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Submission Form */}
+          <motion.form 
+            onSubmit={handleChallengeSubmit}
+            className="bg-white rounded-xl shadow-md p-6 space-y-4"
+          >
+            <h3 className="text-lg font-semibold">Your Solution</h3>
+            <textarea
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              placeholder="Enter your payload here..."
+              rows={5}
+            />
+            
+            <motion.button
+              type="submit"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              disabled={isSubmitting}
+              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              {isSubmitting ? (
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                "Submit Solution"
+              )}
+            </motion.button>
+          </motion.form>
+
+          {/* Result Message */}
+          {challengeResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`p-4 rounded-lg flex items-center ${
+                challengeResult.includes("passed") 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}
+            >
+              {challengeResult.includes("passed") ? (
+                <FiCheckCircle className="mr-2 flex-shrink-0" />
+              ) : (
+                <FiAlertCircle className="mr-2 flex-shrink-0" />
+              )}
+              <span>{challengeResult}</span>
+            </motion.div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Success Modal */}
+      <AnimatePresence>
+        {challengePassed && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-4"
+            >
+              <div className="text-center">
+                <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+                  <FiCheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Challenge Complete!</h3>
+                <p className="text-gray-600 mb-6">
+                  You've earned {challengeDetails.max_score} points for completing this challenge!
+                </p>
+                <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-3">
+                  <button
+                    onClick={() => navigate('/challenges')}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    View More Challenges
+                  </button>
+                  <button
+                    onClick={() => navigate('/dashboard')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Back to Dashboard
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      <AIAssistant />
     </div>
   );
 }
