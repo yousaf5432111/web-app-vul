@@ -6,6 +6,7 @@ use App\Http\Controllers\ChallengeController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\FeedbackController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AssistantController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -41,10 +42,11 @@ Route::post('/challenges/csrf-demo', [ChallengeController::class, 'csrfDemo']);
 
 Route::post('/challenges/{id}/evaluate', [ChallengeController::class, 'evaluate']);
 
+Route::get('/leaderboard', [ChallengeController::class, 'leaderboard']);
+
 
 Route::get('/user-details', [UserController::class, 'getUserDetails']);
 Route::post('/update-profile', [UserController::class, 'updateProfile']);
-
 
 
 Route::post('/feedback/test', [FeedbackController::class, 'test']);
@@ -55,3 +57,7 @@ Route::put('/feedback/{id}', [FeedbackController::class, 'update']);
 Route::delete('/feedback/{id}', [FeedbackController::class, 'destroy']);
 Route::get('/feedback/export/csv', [FeedbackController::class, 'exportCsv']);
 Route::get('/feedback/stats', [FeedbackController::class, 'getStats']);
+
+
+
+Route::post('/ask-assistant', [AssistantController::class, 'ask']);
