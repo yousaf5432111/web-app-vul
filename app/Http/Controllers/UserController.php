@@ -59,4 +59,27 @@ class UserController extends Controller
     ]);
 }
 
+public function index()
+{
+    $users = User::paginate(20);
+    return response()->json($users);
+}
+
+public function show($id)
+{
+    $user = User::findOrFail($id);
+    return response()->json($user);
+}
+
+public function delete($id)
+{
+    if (auth()->id() == $id) {
+        return response()->json(['error' => 'You cannot delete your own account'], 400);
+    }
+
+    $user = User::findOrFail($id);
+    $user->delete();
+    return response()->json(['message' => 'User deleted successfully']);
+}
+
 }
