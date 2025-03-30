@@ -219,39 +219,47 @@ export default function UserDashboard() {
                 >
                   <h2 className="text-2xl font-bold mb-6 text-gray-800">Security Challenges</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {challenges.map((challenge) => (
-                      <motion.div
-                        key={challenge.id}
-                        whileHover={{ y: -5 }}
-                        className="bg-white rounded-xl shadow-md overflow-hidden"
-                      >
-                        <div className="p-5">
-                          <div className="flex items-start mb-3">
-                            {completedItems.includes(challenge.id) ? (
-                              <FiCheckCircle className="text-green-500 mr-3 text-xl mt-1" />
-                            ) : (
-                              <div className="w-5 h-5 border-2 border-gray-300 rounded-full mr-3 mt-1"></div>
-                            )}
-                            <div>
-                              <h3 className="text-lg font-semibold">{challenge.title}</h3>
-                              <p className="text-gray-600 text-sm mt-1">{challenge.description}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-                              {challenge.difficulty}
-                            </span>
-                            <Link
-                              to={`/challenges/${challenge.id}`}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                            >
-                              Start Challenge
-                            </Link>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                  {challenges.map((challenge) => (
+  <motion.div
+    key={challenge.id}
+    whileHover={{ y: -5 }}
+    className="bg-white rounded-xl shadow-md overflow-hidden"
+  >
+    <div className="p-5">
+      <div className="flex items-start mb-3">
+        {completedItems.includes(challenge.id) ? (
+          <FiCheckCircle className="text-green-500 mr-3 text-xl mt-1" />
+        ) : (
+          <div className="w-5 h-5 border-2 border-gray-300 rounded-full mr-3 mt-1"></div>
+        )}
+        <div>
+          <h3 className="text-lg font-semibold">{challenge.title}</h3>
+          <p className="text-gray-600 text-sm mt-1">{challenge.description}</p>
+          <div className="flex items-center mt-2">
+            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full mr-2">
+              {challenge.type.replace('_', ' ')}
+            </span>
+            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-800 rounded-full">
+              {challenge.difficulty}
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-500">
+          Max score: {challenge.max_score}
+        </span>
+        <Link
+          to={`/challenges/${challenge.id}`}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+        >
+          Start Challenge
+        </Link>
+      </div>
+    </div>
+  </motion.div>
+))}
                   </div>
                 </motion.div>
               )}
