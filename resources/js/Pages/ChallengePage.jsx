@@ -15,17 +15,32 @@ export default function ChallengePage() {
     title: '',
     instructions: '',
     difficulty: '',
-    max_score: 0
+    max_score: 0,
+    type: 'practical',
+    options: [],
+    correct_answers: [],
+    matching_pairs: []
   });
   const [challengePassed, setChallengePassed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userInput, setUserInput] = useState('');
+  const [selectedOption, setSelectedOption] = useState('');
+  const [trueFalseAnswer, setTrueFalseAnswer] = useState(null);
+  const [matchingPairs, setMatchingPairs] = useState([]);
+  const [availableOptions, setAvailableOptions] = useState([]);
 
   useEffect(() => {
     const fetchChallengeDetails = async () => {
       try {
         const response = await api.get(`/challenges/${id}`);
         setChallengeDetails(response.data);
+        
+        if (response.data.type === 'matching') {
+          const pairs = JSON.parse(response.data.matching_pairs);
+          const options = pairs.map(pair => pair.right);
+          setMatchingPairs(pairs.map(pair => ({ left: pair.left, right: '' })));
+          setAvailableOptions(options.sort(() => Math.random() - 0.5));
+        }
       } catch (error) {
         console.error("Failed to fetch challenge details", error);
       }
@@ -42,10 +57,25 @@ export default function ChallengePage() {
     e.preventDefault();
     setIsSubmitting(true);
     const userId = localStorage.getItem('userId');
+    
+    let payload;
+    switch (challengeDetails.type) {
+      case 'mcq':
+        payload = selectedOption;
+        break;
+      case 'true_false':
+        payload = trueFalseAnswer;
+        break;
+      case 'matching':
+        payload = JSON.stringify(matchingPairs);
+        break;
+      default:
+        payload = userInput;
+    }
   
     try {
       const response = await api.post(`/challenges/${id}/evaluate`, { 
-        payload: userInput,
+        payload,
         user_id: userId
       });
       
@@ -83,6 +113,103 @@ export default function ChallengePage() {
       case 'medium': return 'bg-yellow-100 text-yellow-800';
       case 'hard': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleMatchSelect = (leftItem, selectedRight) => {
+    setMatchingPairs(prev => 
+      prev.map(pair => 
+        pair.left === leftItem ? { ...pair, right: selectedRight } : pair
+      )
+    );
+  };
+
+  const renderChallengeForm = () => {
+    switch (challengeDetails.type) {
+      case 'mcq':
+        return (
+          <div className="space-y-3">
+            {JSON.parse(challengeDetails.options).map((option, index) => (
+              <div 
+                key={index}
+                className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                  selectedOption === option 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-300 hover:bg-gray-50'
+                }`}
+                onClick={() => setSelectedOption(option)}
+              >
+                {option}
+              </div>
+            ))}
+          </div>
+        );
+        
+      case 'true_false':
+        return (
+          <div className="flex space-x-4">
+            <button
+              className={`px-6 py-3 rounded-lg text-lg font-medium ${
+                trueFalseAnswer === true 
+                  ? 'bg-green-100 text-green-800 border-green-500 border-2' 
+                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+              }`}
+              onClick={() => setTrueFalseAnswer(true)}
+            >
+              True
+            </button>
+            <button
+              className={`px-6 py-3 rounded-lg text-lg font-medium ${
+                trueFalseAnswer === false 
+                  ? 'bg-red-100 text-red-800 border-red-500 border-2' 
+                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+              }`}
+              onClick={() => setTrueFalseAnswer(false)}
+            >
+              False
+            </button>
+          </div>
+        );
+        
+      case 'matching':
+        return (
+          <div className="space-y-4">
+            {matchingPairs.map((pair, index) => (
+              <div key={index} className="flex items-center space-x-4">
+                <div className="w-1/2 p-3 bg-gray-100 rounded-lg">
+                  {pair.left}
+                </div>
+                <select
+                  value={pair.right}
+                  onChange={(e) => handleMatchSelect(pair.left, e.target.value)}
+                  className="w-1/2 p-3 border border-gray-300 rounded-lg"
+                >
+                  <option value="">Select match</option>
+                  {availableOptions.map((option, i) => (
+                    <option 
+                      key={i} 
+                      value={option}
+                      disabled={matchingPairs.some(p => p.right === option && p.left !== pair.left)}
+                    >
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        );
+        
+      default: // practical
+        return (
+          <textarea
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            placeholder="Enter your payload here..."
+            rows={5}
+          />
+        );
     }
   };
 
@@ -166,20 +293,22 @@ export default function ChallengePage() {
             onSubmit={handleChallengeSubmit}
             className="bg-white rounded-xl shadow-md p-6 space-y-4"
           >
-            <h3 className="text-lg font-semibold">Your Solution</h3>
-            <textarea
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="Enter your payload here..."
-              rows={5}
-            />
+            <h3 className="text-lg font-semibold">
+              {challengeDetails.type === 'mcq' ? 'Select the correct answer' : 
+               challengeDetails.type === 'true_false' ? 'Select True or False' :
+               challengeDetails.type === 'matching' ? 'Match the items' : 'Your Solution'}
+            </h3>
+            
+            {renderChallengeForm()}
             
             <motion.button
               type="submit"
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
-              disabled={isSubmitting}
+              disabled={isSubmitting || 
+                (challengeDetails.type === 'mcq' && !selectedOption) ||
+                (challengeDetails.type === 'true_false' && trueFalseAnswer === null) ||
+                (challengeDetails.type === 'matching' && matchingPairs.some(p => !p.right))}
               className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               {isSubmitting ? (
@@ -199,12 +328,12 @@ export default function ChallengePage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className={`p-4 rounded-lg flex items-center ${
-                challengeResult.includes("passed") 
+                challengeResult.includes("passed") || challengeResult.includes("Correct") 
                   ? 'bg-green-100 text-green-800' 
                   : 'bg-red-100 text-red-800'
               }`}
             >
-              {challengeResult.includes("passed") ? (
+              {challengeResult.includes("passed") || challengeResult.includes("Correct") ? (
                 <FiCheckCircle className="mr-2 flex-shrink-0" />
               ) : (
                 <FiAlertCircle className="mr-2 flex-shrink-0" />
