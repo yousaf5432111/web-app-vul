@@ -240,32 +240,75 @@ class ChallengeController extends Controller
      * Admin: Update a challenge
      */
     public function update(Request $request, $id)
-    {
-        $challenge = Challenge::findOrFail($id);
+{
+    $challenge = Challenge::findOrFail($id);
 
-        $validator = Validator::make($request->all(), [
-            'title' => 'sometimes|required|string|max:255',
-            'instructions' => 'sometimes|required|string',
-            'difficulty' => 'sometimes|required|in:easy,medium,hard',
-            'max_score' => 'sometimes|required|integer|min:1',
-            'type' => 'sometimes|required|in:practical,mcq,true_false,matching',
-            'options' => 'nullable|json',
-            'correct_answers' => 'nullable|json',
-            'matching_pairs' => 'nullable|json',
-        ]);
+    $validator = Validator::make($request->all(), [
+        'title' => 'sometimes|required|string|max:255',
+        'instructions' => 'sometimes|required|string',
+        'difficulty' => 'sometimes|required|in:Easy,Medium,Hard',
+        'max_score' => 'sometimes|required|integer|min:1',
+        'type' => 'sometimes|required|in:practical,mcq,true_false,matching',
+        'options' => [
+            'nullable',
+            function ($attribute, $value, $fail) {
+                if (!empty($value) && !$this->isValidJson($value)) {
+                    $fail('The '.$attribute.' must be valid JSON.');
+                }
+            }
+        ],
+        'correct_answers' => [
+            'nullable',
+            function ($attribute, $value, $fail) {
+                if (!empty($value) && !$this->isValidJson($value)) {
+                    $fail('The '.$attribute.' must be valid JSON.');
+                }
+            }
+        ],
+        'matching_pairs' => [
+            'nullable',
+            function ($attribute, $value, $fail) {
+                if (!empty($value) && !$this->isValidJson($value)) {
+                    $fail('The '.$attribute.' must be valid JSON.');
+                }
+            }
+        ],
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        try {
-            $challenge->update($request->all());
-            return response()->json($challenge);
-        } catch (\Exception $e) {
-            Log::error('Challenge update failed', ['id' => $id, 'error' => $e->getMessage()]);
-            return response()->json(['error' => 'Failed to update challenge'], 500);
-        }
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    try {
+        $data = $request->all();
+        
+        // Clean up JSON fields based on type
+        if ($challenge->type !== 'mcq') {
+            $data['options'] = null;
+        }
+        if (!in_array($challenge->type, ['mcq', 'true_false'])) {
+            $data['correct_answers'] = null;
+        }
+        if ($challenge->type !== 'matching') {
+            $data['matching_pairs'] = null;
+        }
+
+        $challenge->update($data);
+        return response()->json($challenge);
+    } catch (\Exception $e) {
+        Log::error('Challenge update failed', ['id' => $id, 'error' => $e->getMessage()]);
+        return response()->json(['message' => 'Failed to update challenge'], 500);
+    }
+}
+
+private function isValidJson($string) {
+    json_decode($string);
+    return json_last_error() === JSON_ERROR_NONE;
+}
+
 
     /**
      * Admin: Delete a challenge
