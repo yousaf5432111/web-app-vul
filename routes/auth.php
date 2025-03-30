@@ -61,3 +61,18 @@ Route::get('/feedback/stats', [FeedbackController::class, 'getStats']);
 
 
 Route::post('/ask-assistant', [AssistantController::class, 'ask']);
+Route::post('/admin/challenges', [ChallengeController::class, 'store']);
+Route::put('/admin/challenges/{id}', [ChallengeController::class, 'update']);
+Route::delete('/admin/challenges/{id}', [ChallengeController::class, 'destroy']);
+Route::get('/admin/challenges/progress', [ChallengeController::class, 'getAllProgress']);
+
+// Lesson management
+Route::post('/admin/lessons', [LessonController::class, 'store']);
+Route::put('/admin/lessons/{id}', [LessonController::class, 'update']);
+Route::delete('/admin/lessons/{id}', [LessonController::class, 'destroy']);
+
+// User management
+Route::get('/admin/users', [UserController::class, 'index']);
+Route::get('/admin/users/{id}', [UserController::class, 'show']);
+Route::put('/admin/users/{id}', [UserController::class, 'update']);
+Route::delete('/admin/users/{id}', [UserController::class, 'delete']);
