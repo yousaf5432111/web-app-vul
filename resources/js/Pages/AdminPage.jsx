@@ -103,25 +103,52 @@ export default function AdminPage() {
   const handleChallengeSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Prepare the form data
       const formData = {
-        ...challengeForm,
-        options: challengeForm.type === 'mcq' ? challengeForm.options : null,
-        correct_answers: ['mcq', 'true_false'].includes(challengeForm.type) ? challengeForm.correct_answers : null,
-        matching_pairs: challengeForm.type === 'matching' ? challengeForm.matching_pairs : null
+        title: challengeForm.title,
+        instructions: challengeForm.instructions,
+        difficulty: challengeForm.difficulty,
+        max_score: challengeForm.max_score,
+        type: challengeForm.type,
       };
-
+  
+      // Only include JSON fields if they're valid and relevant to the challenge type
+      try {
+        if (challengeForm.type === 'mcq' && challengeForm.options) {
+          formData.options = JSON.parse(challengeForm.options);
+        }
+        if (['mcq', 'true_false'].includes(challengeForm.type) && challengeForm.correct_answers) {
+          formData.correct_answers = JSON.parse(challengeForm.correct_answers);
+        }
+        if (challengeForm.type === 'matching' && challengeForm.matching_pairs) {
+          formData.matching_pairs = JSON.parse(challengeForm.matching_pairs);
+        }
+      } catch (jsonError) {
+        alert('Invalid JSON format in one of the fields. Please check your input.');
+        return;
+      }
+  
+      let response;
       if (editingChallenge) {
-        await api.put(`/admin/challenges/${editingChallenge.id}`, formData);
+        response = await api.put(`/admin/challenges/${editingChallenge.id}`, formData);
       } else {
-        await api.post('/admin/challenges', formData);
+        response = await api.post('/admin/challenges', formData);
       }
       
       setShowChallengeForm(false);
       setEditingChallenge(null);
       fetchAllData();
     } catch (err) {
-      alert('Error saving challenge');
-      console.error(err);
+      if (err.response?.status === 422) {
+        // Handle validation errors
+        const errorMessages = Object.values(err.response.data.errors)
+          .flat()
+          .join('\n');
+        alert(`Validation failed:\n${errorMessages}`);
+      } else {
+        alert('Error saving challenge');
+        console.error(err);
+      }
     }
   };
 
@@ -355,9 +382,9 @@ export default function AdminPage() {
                   onChange={(e) => setChallengeForm({...challengeForm, difficulty: e.target.value})}
                   required
                 >
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
                 </select>
               </div>
             </div>
