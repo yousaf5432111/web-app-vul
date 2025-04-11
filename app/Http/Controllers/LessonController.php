@@ -38,7 +38,15 @@ class LessonController extends Controller
 
 public function update(Request $request, $id)
 {
+
+
+    
     $lesson = Lesson::findOrFail($id);
+
+    // // Convert resources to JSON if it's not already
+    if ($request->has('resources') && !is_string($request->resources)) {
+        $request->merge(['resources' => json_encode($request->resources)]);
+    }
 
     $validator = Validator::make($request->all(), [
         'title' => 'sometimes|required|string|max:255',
@@ -51,8 +59,9 @@ public function update(Request $request, $id)
     }
 
     $lesson->update($request->all());
-    return response()->json($lesson);
+    // return response()->json($lesson);
 }
+
 
 public function destroy($id)
 {
