@@ -11,9 +11,15 @@ import UserProfilePage from './UserProfilePage';
 import AboutPage from './AboutPage';
 import FeedbackPage from './FeedbackPage';
 import AdminPage from './AdminPage';
+import SecurityReportPage from './SecurityReportPage';
+import { useEffect } from 'react';
 // import Leaderboard from './Leaderboard';
 
 export default function App() {
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'blue';
+    document.documentElement.classList.add(`theme-${savedTheme}`);
+  }, []);
   return (
     <Router>
       <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-200">
@@ -31,6 +37,7 @@ export default function App() {
             <Route path="/about" element={<AboutPage/>} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/feedback" element={<FeedbackPage />} />
+            <Route path="/security-report" element={<SecurityReportPage />} />
             {/* <Route path='/leaderboard' element={<Leaderboard />} /> */}
             <Route path="*" element={<h1>Not Found</h1>} />
           </Routes>
