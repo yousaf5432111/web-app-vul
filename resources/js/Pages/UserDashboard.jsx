@@ -6,6 +6,70 @@ import Leaderboard from './Leaderboard';
 import api from './api';
 import AIAssistant from './AIAssistant';
 
+// Helper function to detect and format embed URLs for various platforms
+const getEmbedUrl = (url) => {
+  if (!url) return null;
+
+  // YouTube
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    const videoId = (match && match[2].length === 11) ? match[2] : null;
+    return videoId ? `https://www.youtube.com/embed/${videoId}?rel=0` : null;
+  }
+
+  // Loom
+  if (url.includes('loom.com')) {
+    const loomId = url.split('/').pop();
+    return loomId ? `https://www.loom.com/embed/${loomId}` : null;
+  }
+
+  // Dailymotion
+  if (url.includes('dailymotion.com') || url.includes('dai.ly')) {
+    const regExp = /^.*(dailymotion.com\/video\/|dai.ly\/)([^_]+).*/;
+    const match = url.match(regExp);
+    const videoId = match ? match[2] : null;
+    return videoId ? `https://www.dailymotion.com/embed/video/${videoId}` : null;
+  }
+
+  // Vimeo
+  if (url.includes('vimeo.com')) {
+    const regExp = /(?:vimeo.com\/|video\/)(\d+)/;
+    const match = url.match(regExp);
+    const videoId = match ? match[1] : null;
+    return videoId ? `https://player.vimeo.com/video/${videoId}` : null;
+  }
+
+  // Return original URL if no specific handler found
+  return url;
+};
+
+// Video Player Component
+const VideoPlayer = ({ url }) => {
+  const embedUrl = getEmbedUrl(url);
+  
+  if (!embedUrl) {
+    return (
+      <div className="p-4 bg-red-100 text-red-800 rounded-lg">
+        Video URL not supported or invalid
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+      <iframe
+        src={embedUrl}
+        title="Video Player"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        className="absolute inset-0 w-full h-full"
+      />
+    </div>
+  );
+};
+
 export default function UserDashboard() {
   const [username, setUsername] = useState('Learner');
   const [progress, setProgress] = useState(0);
@@ -30,20 +94,40 @@ export default function UserDashboard() {
         const completed = progressResponse.data.filter(item => item.completed).map(item => item.item_id);
         setCompletedItems(completed);
 
-        // Calculate progress percentage
-        const lessonsResponse = await api.get('/lessons');
-        const challengesResponse = await api.get('/challenges');
+        // Fetch lessons and challenges
+        const [lessonsResponse, challengesResponse] = await Promise.all([
+          api.get('/lessons'),
+          api.get('/challenges')
+        ]);
+
         const totalItems = lessonsResponse.data.length + challengesResponse.data.length;
         const percentage = totalItems > 0 ? (completed.length / totalItems) * 100 : 0;
-        console.log("Progress percentage:", percentage);
+        
         setProgress(percentage);
-        setLessons(lessonsResponse.data.map(lesson => ({
-          ...lesson,
-          open: false,
-          resources: Array.isArray(JSON.parse(lesson.resources)) ? 
-            JSON.parse(lesson.resources) : 
-            []
-        })));
+        
+        // Process lessons with proper resource handling
+        setLessons(lessonsResponse.data.map(lesson => {
+          let resources = [];
+          try {
+            // Handle both stringified JSON and already parsed objects
+            const parsedResources = typeof lesson.resources === 'string' ? 
+              JSON.parse(lesson.resources) : 
+              lesson.resources;
+            
+            // Ensure resources is always an array
+            resources = Array.isArray(parsedResources) ? parsedResources : [];
+          } catch (e) {
+            console.error("Error parsing resources for lesson", lesson.id, e);
+            resources = [];
+          }
+
+          return {
+            ...lesson,
+            open: false,
+            resources
+          };
+        }));
+
         setChallenges(challengesResponse.data);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -62,7 +146,12 @@ export default function UserDashboard() {
   const markAsComplete = async (itemId, type) => {
     try {
       const userId = localStorage.getItem('userId');
-      await api.post('/progress', { user_id: userId, item_id: itemId, item_type: type, completed: true });
+      await api.post('/progress', { 
+        user_id: userId, 
+        item_id: itemId, 
+        item_type: type, 
+        completed: true 
+      });
       setCompletedItems([...completedItems, itemId]);
       
       // Update progress
@@ -219,47 +308,47 @@ export default function UserDashboard() {
                 >
                   <h2 className="text-2xl font-bold mb-6 text-gray-800">Security Challenges</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {challenges.map((challenge) => (
-  <motion.div
-    key={challenge.id}
-    whileHover={{ y: -5 }}
-    className="bg-white rounded-xl shadow-md overflow-hidden"
-  >
-    <div className="p-5">
-      <div className="flex items-start mb-3">
-        {completedItems.includes(challenge.id) ? (
-          <FiCheckCircle className="text-green-500 mr-3 text-xl mt-1" />
-        ) : (
-          <div className="w-5 h-5 border-2 border-gray-300 rounded-full mr-3 mt-1"></div>
-        )}
-        <div>
-          <h3 className="text-lg font-semibold">{challenge.title}</h3>
-          <p className="text-gray-600 text-sm mt-1">{challenge.description}</p>
-          <div className="flex items-center mt-2">
-            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full mr-2">
-              {challenge.type.replace('_', ' ')}
-            </span>
-            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-800 rounded-full">
-              {challenge.difficulty}
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-500">
-          Max score: {challenge.max_score}
-        </span>
-        <Link
-          to={`/challenges/${challenge.id}`}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-        >
-          Start Challenge
-        </Link>
-      </div>
-    </div>
-  </motion.div>
-))}
+                    {challenges.map((challenge) => (
+                      <motion.div
+                        key={challenge.id}
+                        whileHover={{ y: -5 }}
+                        className="bg-white rounded-xl shadow-md overflow-hidden"
+                      >
+                        <div className="p-5">
+                          <div className="flex items-start mb-3">
+                            {completedItems.includes(challenge.id) ? (
+                              <FiCheckCircle className="text-green-500 mr-3 text-xl mt-1" />
+                            ) : (
+                              <div className="w-5 h-5 border-2 border-gray-300 rounded-full mr-3 mt-1"></div>
+                            )}
+                            <div>
+                              <h3 className="text-lg font-semibold">{challenge.title}</h3>
+                              <p className="text-gray-600 text-sm mt-1">{challenge.description}</p>
+                              <div className="flex items-center mt-2">
+                                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full mr-2">
+                                  {challenge.type.replace('_', ' ')}
+                                </span>
+                                <span className="text-xs px-2 py-1 bg-gray-100 text-gray-800 rounded-full">
+                                  {challenge.difficulty}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">
+                              Max score: {challenge.max_score}
+                            </span>
+                            <Link
+                              to={`/challenges/${challenge.id}`}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                            >
+                              Start Challenge
+                            </Link>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
                 </motion.div>
               )}
@@ -268,7 +357,8 @@ export default function UserDashboard() {
 
           {/* Video Player / Recent Activity */}
           <div className="space-y-6">
-          <Leaderboard />
+            <Leaderboard />
+            
             {selectedVideo ? (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -277,16 +367,7 @@ export default function UserDashboard() {
               >
                 <div className="p-5">
                   <h3 className="font-semibold mb-3">Now Playing</h3>
-                  <div className="relative w-full aspect-video rounded-lg overflow-hidden">
-                    <iframe
-                      src={selectedVideo.replace("watch?v=", "embed/")}
-                      title="Video Player"
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      className="absolute inset-0 w-full h-full"
-                    ></iframe>
-                  </div>
+                  <VideoPlayer url={selectedVideo} />
                 </div>
               </motion.div>
             ) : (
