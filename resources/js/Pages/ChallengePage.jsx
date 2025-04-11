@@ -1,10 +1,30 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiClock, FiAward, FiFlag, FiArrowLeft, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import {
+  FiClock,
+  FiAward,
+  FiFlag,
+  FiArrowLeft,
+  FiCheckCircle,
+  FiAlertCircle,
+} from 'react-icons/fi';
 import api from './api';
 import Confetti from 'react-confetti';
 import AIAssistant from './AIAssistant';
+
+/**
+ * Helper to safely parse data.
+ * If the data is already an array, it returns it.
+ */
+const parseData = (data) => {
+  if (Array.isArray(data)) return data;
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return data;
+  }
+};
 
 export default function ChallengePage() {
   const { id } = useParams();
@@ -19,12 +39,13 @@ export default function ChallengePage() {
     type: 'practical',
     options: [],
     correct_answers: [],
-    matching_pairs: []
+    matching_pairs: [],
   });
   const [challengePassed, setChallengePassed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userInput, setUserInput] = useState('');
-  const [selectedOption, setSelectedOption] = useState('');
+  // For MCQ: an object mapping question index to selected option index.
+  const [selectedOptions, setSelectedOptions] = useState({});
   const [trueFalseAnswer, setTrueFalseAnswer] = useState(null);
   const [matchingPairs, setMatchingPairs] = useState([]);
   const [availableOptions, setAvailableOptions] = useState([]);
@@ -33,20 +54,40 @@ export default function ChallengePage() {
     const fetchChallengeDetails = async () => {
       try {
         const response = await api.get(`/challenges/${id}`);
-        setChallengeDetails(response.data);
-        
-        if (response.data.type === 'matching') {
-          const pairs = JSON.parse(response.data.matching_pairs);
-          const options = pairs.map(pair => pair.right);
-          setMatchingPairs(pairs.map(pair => ({ left: pair.left, right: '' })));
+        const details = response.data;
+        setChallengeDetails(details);
+
+        // Handle matching challenges
+        if (details.type === 'matching') {
+          const pairs = parseData(details.matching_pairs);
+          const options = pairs.map((pair) => pair.right);
+          setMatchingPairs(
+            pairs.map((pair) => ({
+              left: pair.left,
+              right: '',
+            }))
+          );
+          // Randomize available options
           setAvailableOptions(options.sort(() => Math.random() - 0.5));
         }
+
+        // Initialize MCQs state
+        if (details.type === 'mcq') {
+          const questions = parseData(details.options);
+          const initialSelections = {};
+          questions.forEach((_, index) => {
+            initialSelections[index] = null;
+          });
+          setSelectedOptions(initialSelections);
+        }
       } catch (error) {
-        console.error("Failed to fetch challenge details", error);
+        console.error('Failed to fetch challenge details', error);
       }
     };
+
     fetchChallengeDetails();
 
+    // Timer countdown if challenge not passed yet
     if (timeLeft > 0 && !challengePassed) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
@@ -57,12 +98,14 @@ export default function ChallengePage() {
     e.preventDefault();
     setIsSubmitting(true);
     const userId = localStorage.getItem('userId');
-    
+  
     let payload;
     switch (challengeDetails.type) {
-      case 'mcq':
-        payload = selectedOption;
+      case 'mcq': {
+        const questions = parseData(challengeDetails.options);
+        payload = questions.map((_, index) => selectedOptions[index] ?? null);
         break;
+      }
       case 'true_false':
         payload = trueFalseAnswer;
         break;
@@ -70,29 +113,49 @@ export default function ChallengePage() {
         payload = JSON.stringify(matchingPairs);
         break;
       default:
-        payload = userInput;
+        if (
+          challengeDetails.type === 'practical' &&
+          challengeDetails.title === 'Simulated CSRF Attack'
+        ) {
+          try {
+            const parsed = JSON.parse(userInput);
+            payload = JSON.stringify(parsed);
+          } catch (e) {
+            alert('Invalid JSON format for CSRF payload.');
+            setIsSubmitting(false);
+            return;
+          }
+        } else {
+          payload = userInput;
+        }
     }
   
     try {
-      const response = await api.post(`/challenges/${id}/evaluate`, { 
+      const response = await api.post(`/challenges/${id}/evaluate`, {
         payload,
-        user_id: userId
+        user_id: userId,
       });
-      
+  
+      if (challengeDetails.type === 'mcq') {
+        const correctAnswers = parseData(challengeDetails.correct_answers);
+        setSelectedOptions(correctAnswers);
+      }
+  
       if (response.data.result) {
         setChallengePassed(true);
-        setChallengeResult("Challenge passed! Well done!");
+        setChallengeResult('Challenge passed! Well done!');
         await updateProgress();
       } else {
-        setChallengeResult(response.data.message || "Challenge failed. Try again.");
+        setChallengeResult(response.data.message || 'Challenge failed. Try again.');
       }
     } catch (error) {
-      console.error("Challenge evaluation failed", error);
-      setChallengeResult("Challenge evaluation failed.");
+      console.error('Challenge evaluation failed', error);
+      setChallengeResult('Challenge evaluation failed.');
     } finally {
       setIsSubmitting(false);
     }
   };
+  
 
   const updateProgress = async () => {
     try {
@@ -100,58 +163,78 @@ export default function ChallengePage() {
         user_id: localStorage.getItem('userId'),
         challenge_id: id,
         completed: true,
-        score: challengeDetails.max_score
+        score: challengeDetails.max_score,
       });
     } catch (error) {
-      console.error("Failed to update progress", error);
+      console.error('Failed to update progress', error);
     }
   };
 
   const getDifficultyColor = () => {
-    switch(challengeDetails.difficulty.toLowerCase()) {
-      case 'easy': return 'bg-green-100 text-green-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'hard': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+    switch (challengeDetails.difficulty.toLowerCase()) {
+      case 'easy':
+        return 'bg-green-100 text-green-800';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'hard':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
   const handleMatchSelect = (leftItem, selectedRight) => {
-    setMatchingPairs(prev => 
-      prev.map(pair => 
+    setMatchingPairs((prev) =>
+      prev.map((pair) =>
         pair.left === leftItem ? { ...pair, right: selectedRight } : pair
       )
     );
   };
 
+  const handleMcqSelect = (questionIndex, optionIndex) => {
+    // Prevent changes once the challenge is submitted
+    if (challengePassed) return;
+    setSelectedOptions((prev) => ({
+      ...prev,
+      [questionIndex]: optionIndex,
+    }));
+  };
+
   const renderChallengeForm = () => {
     switch (challengeDetails.type) {
-      case 'mcq':
+      case 'mcq': {
+        const questions = parseData(challengeDetails.options);
         return (
-          <div className="space-y-3">
-            {JSON.parse(challengeDetails.options).map((option, index) => (
-              <div 
-                key={index}
-                className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                  selectedOption === option 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-                onClick={() => setSelectedOption(option)}
-              >
-                {option}
+          <div className="space-y-6">
+            {questions.map((question, qIndex) => (
+              <div key={qIndex} className="space-y-3">
+                <h4 className="font-medium">{question.question}</h4>
+                {question.options.map((option, oIndex) => (
+                  <div
+                    key={oIndex}
+                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                      selectedOptions[qIndex] === oIndex
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-300 hover:bg-gray-50'
+                    }`}
+                    onClick={() => handleMcqSelect(qIndex, oIndex)}
+                  >
+                    {option}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
         );
-        
+      }
       case 'true_false':
         return (
           <div className="flex space-x-4">
             <button
+              type="button"
               className={`px-6 py-3 rounded-lg text-lg font-medium ${
-                trueFalseAnswer === true 
-                  ? 'bg-green-100 text-green-800 border-green-500 border-2' 
+                trueFalseAnswer === true
+                  ? 'bg-green-100 text-green-800 border-green-500 border-2'
                   : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
               }`}
               onClick={() => setTrueFalseAnswer(true)}
@@ -159,9 +242,10 @@ export default function ChallengePage() {
               True
             </button>
             <button
+              type="button"
               className={`px-6 py-3 rounded-lg text-lg font-medium ${
-                trueFalseAnswer === false 
-                  ? 'bg-red-100 text-red-800 border-red-500 border-2' 
+                trueFalseAnswer === false
+                  ? 'bg-red-100 text-red-800 border-red-500 border-2'
                   : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
               }`}
               onClick={() => setTrueFalseAnswer(false)}
@@ -170,7 +254,6 @@ export default function ChallengePage() {
             </button>
           </div>
         );
-        
       case 'matching':
         return (
           <div className="space-y-4">
@@ -181,15 +264,20 @@ export default function ChallengePage() {
                 </div>
                 <select
                   value={pair.right}
-                  onChange={(e) => handleMatchSelect(pair.left, e.target.value)}
+                  onChange={(e) =>
+                    handleMatchSelect(pair.left, e.target.value)
+                  }
                   className="w-1/2 p-3 border border-gray-300 rounded-lg"
                 >
                   <option value="">Select match</option>
                   {availableOptions.map((option, i) => (
-                    <option 
-                      key={i} 
+                    <option
+                      key={i}
                       value={option}
-                      disabled={matchingPairs.some(p => p.right === option && p.left !== pair.left)}
+                      disabled={matchingPairs.some(
+                        (p) =>
+                          p.right === option && p.left !== pair.left
+                      )}
                     >
                       {option}
                     </option>
@@ -199,8 +287,7 @@ export default function ChallengePage() {
             ))}
           </div>
         );
-        
-      default: // practical
+      default:
         return (
           <textarea
             value={userInput}
@@ -213,24 +300,38 @@ export default function ChallengePage() {
     }
   };
 
+  // Check if every MCQ question has been answered.
+  const allMcqsAnswered = () => {
+    if (challengeDetails.type !== 'mcq') return true;
+    const questions = parseData(challengeDetails.options);
+    return questions.every((_, index) => selectedOptions[index] !== null);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
       {/* Confetti Celebration */}
       <AnimatePresence>
-        {challengePassed && <Confetti width={window.innerWidth} height={window.innerHeight} />}
+        {challengePassed && (
+          <Confetti
+            width={window.innerWidth}
+            height={window.innerHeight}
+          />
+        )}
       </AnimatePresence>
 
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
           >
             <FiArrowLeft className="mr-2" /> Back to Challenges
           </button>
-          
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${getDifficultyColor()}`}>
+
+          <div
+            className={`px-3 py-1 rounded-full text-sm font-medium ${getDifficultyColor()}`}
+          >
             {challengeDetails.difficulty}
           </div>
         </div>
@@ -244,12 +345,13 @@ export default function ChallengePage() {
           {/* Challenge Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-800">
-              {challengeDetails.title || "Challenge"}
+              {challengeDetails.title || 'Challenge'}
             </h1>
-            
             <div className="flex items-center mt-4 md:mt-0">
               <FiAward className="text-yellow-500 mr-2" />
-              <span className="font-medium">Max Score: {challengeDetails.max_score}</span>
+              <span className="font-medium">
+                Max Score: {challengeDetails.max_score}
+              </span>
             </div>
           </div>
 
@@ -261,14 +363,17 @@ export default function ChallengePage() {
                 <span className="font-medium">Time Remaining</span>
               </div>
               <span className="text-xl font-mono">
-                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                {Math.floor(timeLeft / 60)}:
+                {(timeLeft % 60).toString().padStart(2, '0')}
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-              <motion.div 
+              <motion.div
                 className="h-2 rounded-full bg-gradient-to-r from-blue-400 to-indigo-500"
                 initial={{ width: '100%' }}
-                animate={{ width: `${(timeLeft / 300) * 100}%` }}
+                animate={{
+                  width: `${(timeLeft / 300) * 100}%`,
+                }}
                 transition={{ duration: 1 }}
               />
             </div>
@@ -282,42 +387,67 @@ export default function ChallengePage() {
               </h2>
               <div className="prose max-w-none">
                 <p className="text-gray-700 whitespace-pre-line">
-                  {challengeDetails.instructions || "No challenge instructions available."}
+                  {challengeDetails.instructions ||
+                    'No challenge instructions available.'}
                 </p>
               </div>
             </div>
           </div>
 
           {/* Submission Form */}
-          <motion.form 
+          <motion.form
             onSubmit={handleChallengeSubmit}
             className="bg-white rounded-xl shadow-md p-6 space-y-4"
           >
             <h3 className="text-lg font-semibold">
-              {challengeDetails.type === 'mcq' ? 'Select the correct answer' : 
-               challengeDetails.type === 'true_false' ? 'Select True or False' :
-               challengeDetails.type === 'matching' ? 'Match the items' : 'Your Solution'}
+              {challengeDetails.type === 'mcq'
+                ? 'Select the correct answers'
+                : challengeDetails.type === 'true_false'
+                ? 'Select True or False'
+                : challengeDetails.type === 'matching'
+                ? 'Match the items'
+                : 'Your Solution'}
             </h3>
-            
+
             {renderChallengeForm()}
-            
+
             <motion.button
               type="submit"
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
-              disabled={isSubmitting || 
-                (challengeDetails.type === 'mcq' && !selectedOption) ||
-                (challengeDetails.type === 'true_false' && trueFalseAnswer === null) ||
-                (challengeDetails.type === 'matching' && matchingPairs.some(p => !p.right))}
+              disabled={
+                isSubmitting ||
+                (challengeDetails.type === 'mcq' && !allMcqsAnswered()) ||
+                (challengeDetails.type === 'true_false' &&
+                  trueFalseAnswer === null) ||
+                (challengeDetails.type === 'matching' &&
+                  matchingPairs.some((p) => !p.right))
+              }
               className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               {isSubmitting ? (
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
               ) : (
-                "Submit Solution"
+                'Submit Solution'
               )}
             </motion.button>
           </motion.form>
@@ -328,12 +458,14 @@ export default function ChallengePage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className={`p-4 rounded-lg flex items-center ${
-                challengeResult.includes("passed") || challengeResult.includes("Correct") 
-                  ? 'bg-green-100 text-green-800' 
+                challengeResult.includes('passed') ||
+                challengeResult.includes('Correct')
+                  ? 'bg-green-100 text-green-800'
                   : 'bg-red-100 text-red-800'
               }`}
             >
-              {challengeResult.includes("passed") || challengeResult.includes("Correct") ? (
+              {challengeResult.includes('passed') ||
+              challengeResult.includes('Correct') ? (
                 <FiCheckCircle className="mr-2 flex-shrink-0" />
               ) : (
                 <FiAlertCircle className="mr-2 flex-shrink-0" />
@@ -358,7 +490,9 @@ export default function ChallengePage() {
                 <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
                   <FiCheckCircle className="h-8 w-8 text-green-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Challenge Complete!</h3>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                  Challenge Complete!
+                </h3>
                 <p className="text-gray-600 mb-6">
                   You've earned {challengeDetails.max_score} points for completing this challenge!
                 </p>
